@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 
@@ -30,7 +30,7 @@ const authHeaders = () => ({
 
 export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(localStorage.getItem('chat-username') || '');
   const [email, setEmail] = useState('');
   const [token, setTokenState] = useState<string | null>(getToken());
   const [messageText, setMessageText] = useState('');
@@ -41,7 +41,29 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  const user = useMemo(() => ({ username }), [username]);
+  const loadMessages = async (currentRoom: string) => {
+    if (!token) return;
+    try {
+      const response = await axios.get(`${API_URL}/api/messages/room/${currentRoom}`, {
+        headers: authHeaders(),
+      });
+      setMessages(response.data || []);
+    } catch (error: any) {
+      setStatus(error?.response?.data?.error || 'Failed to load messages');
+    }
+  };
+
+  const loadOnlineUsers = async () => {
+    if (!token) return;
+    try {
+      const response = await axios.get(`${API_URL}/api/users/online`, {
+        headers: authHeaders(),
+      });
+      setOnlineUsers(response.data || []);
+    } catch (error: any) {
+      console.error(error);
+    }
+  };
 
   const connectSocket = (nextUsername: string, nextToken: string) => {
     if (socketRef.current) {
@@ -49,9 +71,7 @@ export default function App() {
     }
 
     const socket = io(API_URL, {
-      auth: {
-        token: nextToken,
-      },
+      auth: { token: nextToken },
       transports: ['websocket'],
     });
 
@@ -62,7 +82,7 @@ export default function App() {
       setStatus('Connected');
       socket.emit('join', {
         username: nextUsername,
-        userId: localStorage.getItem('chat-user-id'),
+        userId: localStorage.getItem('chat-user-id') || '',
         room,
       });
     });
@@ -95,32 +115,6 @@ export default function App() {
     socket.on('error', (payload) => {
       setStatus(payload?.message || 'Socket error');
     });
-  };
-
-  const loadMessages = async (currentRoom: string) => {
-    if (!token) return;
-
-    try {
-      const response = await axios.get(`${API_URL}/api/messages/room/${currentRoom}`, {
-        headers: authHeaders(),
-      });
-      setMessages(response.data || []);
-    } catch (error: any) {
-      setStatus(error?.response?.data?.error || 'Failed to load messages');
-    }
-  };
-
-  const loadOnlineUsers = async () => {
-    if (!token) return;
-
-    try {
-      const response = await axios.get(`${API_URL}/api/users/online`, {
-        headers: authHeaders(),
-      });
-      setOnlineUsers(response.data || []);
-    } catch (error: any) {
-      console.error(error);
-    }
   };
 
   useEffect(() => {
@@ -157,6 +151,13 @@ export default function App() {
     }
   };
 
+  const switchRoom = (nextRoom: string) => {
+    setRoom(nextRoom);
+    if (socketRef.current) {
+      socketRef.current.emit('switchRoom', { fromRoom: room, toRoom: nextRoom });
+    }
+  };
+
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!messageText.trim() || !socketRef.current) return;
@@ -182,6 +183,7 @@ export default function App() {
       <div className="auth-shell">
         <div className="auth-card">
           <h1>Realtime Chat</h1>
+
           <div className="toggle-row">
             <button className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
               Register
@@ -207,6 +209,7 @@ export default function App() {
             )}
             <button type="submit">{authMode === 'register' ? 'Create account' : 'Login'}</button>
           </form>
+
           {status && <p className="status">{status}</p>}
         </div>
       </div>
@@ -226,7 +229,7 @@ export default function App() {
             <button
               key={name}
               className={room === name ? 'room active' : 'room'}
-              onClick={() => setRoom(name)}
+              onClick={() => switchRoom(name)}
             >
               #{name}
             </button>
@@ -236,6 +239,7 @@ export default function App() {
         <div className="panel-header small">
           <h3>Online</h3>
         </div>
+
         <ul className="user-list">
           {onlineUsers.length > 0 ? (
             onlineUsers.map((userItem) => (
