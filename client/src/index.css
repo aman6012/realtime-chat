@@ -1,280 +1,206 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
-import { io, Socket } from 'socket.io-client';
+* {
+  box-sizing: border-box;
+}
 
-type Message = {
-  _id?: string;
-  sender: string;
-  senderId?: string;
-  content: string;
-  room?: string;
-  to?: string;
-  createdAt?: string;
-};
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+  font-family: Inter, Arial, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
+}
 
-type UserSummary = {
-  _id: string;
-  username: string;
-  online?: boolean;
-};
+button, input {
+  font: inherit;
+}
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+button {
+  cursor: pointer;
+}
 
-const getToken = () => localStorage.getItem('chat-token');
-const setToken = (token: string) => localStorage.setItem('chat-token', token);
-const clearToken = () => localStorage.removeItem('chat-token');
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #0f172a, #111827);
+}
 
-const authHeaders = () => ({
-  Authorization: `Bearer ${getToken()}`,
-});
+.auth-card {
+  width: min(420px, calc(100vw - 32px));
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.5);
+}
 
-export default function App() {
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [token, setTokenState] = useState<string | null>(getToken());
-  const [messageText, setMessageText] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [room, setRoom] = useState('general');
-  const [onlineUsers, setOnlineUsers] = useState<UserSummary[]>([]);
-  const [status, setStatus] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
+.auth-card h1 {
+  margin-top: 0;
+  margin-bottom: 18px;
+  text-align: center;
+}
 
-  const user = useMemo(() => ({ username }), [username]);
+.toggle-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
 
-  const connectSocket = (nextUsername: string, nextToken: string) => {
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
+.toggle-row button,
+.room,
+.ghost,
+.auth-form button,
+.composer button {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #1e293b;
+  color: #f8fafc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  transition: 0.2s ease;
+}
 
-    const socket = io(API_URL, {
-      auth: {
-        token: nextToken,
-      },
-      transports: ['websocket'],
-    });
+.toggle-row button.active,
+.room.active,
+.composer button {
+  background: #3b82f6;
+  border-color: transparent;
+}
 
-    socketRef.current = socket;
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-    socket.on('connect', () => {
-      setIsConnected(true);
-      setStatus('Connected');
-      socket.emit('join', { username: nextUsername, userId: localStorage.getItem('chat-user-id'), room });
-    });
+.auth-form input,
+.composer input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.7);
+  color: #f8fafc;
+  padding: 12px 14px;
+}
 
-    socket.on('connect_error', (err) => {
-      setStatus(`Connection failed: ${err.message}`);
-      setIsConnected(false);
-    });
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100vh;
+}
 
-    socket.on('recentMessages', (history: Message[]) => {
-      setMessages(history || []);
-    });
+.sidebar {
+  background: rgba(15, 23, 42, 0.9);
+  border-right: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 16px;
+}
 
-    socket.on('message', (message: Message) => {
-      setMessages((prev) => [...prev, message]);
-    });
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
 
-    socket.on('onlineUsers', (users: UserSummary[]) => {
-      setOnlineUsers(users || []);
-    });
+.panel-header h2,
+.panel-header h3 {
+  margin: 0;
+}
 
-    socket.on('userJoined', (payload) => {
-      setStatus(`${payload.username} joined ${payload.room}`);
-    });
+.room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
 
-    socket.on('userLeft', (payload) => {
-      setStatus(`${payload.username} left`);
-    });
+.user-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #cbd5e1;
+}
 
-    socket.on('error', (payload) => {
-      setStatus(payload?.message || 'Socket error');
-    });
-  };
+.chat-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
-  const loadMessages = async (currentRoom: string) => {
-    if (!token) return;
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.8);
+}
 
-    try {
-      const response = await axios.get(`${API_URL}/api/messages/room/${currentRoom}`, {
-        headers: authHeaders(),
-      });
-      setMessages(response.data || []);
-    } catch (error: any) {
-      setStatus(error?.response?.data?.error || 'Failed to load messages');
-    }
-  };
+.chat-header h2 {
+  margin: 0 0 4px 0;
+}
 
-  const loadOnlineUsers = async () => {
-    if (!token) return;
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.7);
+}
 
-    try {
-      const response = await axios.get(`${API_URL}/api/users/online`, {
-        headers: authHeaders(),
-      });
-      setOnlineUsers(response.data || []);
-    } catch (error: any) {
-      console.error(error);
-    }
-  };
+.message-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  padding: 10px 12px;
+  max-width: 80%;
+}
 
-  useEffect(() => {
-    if (token && username) {
-      connectSocket(username, token);
-      loadMessages(room);
-      loadOnlineUsers();
-    }
+.message-item strong {
+  color: #93c5fd;
+}
 
-    return () => {
-      socketRef.current?.disconnect();
-    };
-  }, [token, username, room]);
+.empty-state {
+  color: #94a3b8;
+  margin: auto;
+}
 
-  const submitAuth = async (event: React.FormEvent) => {
-    event.preventDefault();
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.9);
+}
 
-    try {
-      const endpoint = authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const payload = authMode === 'register' ? { username, email } : { username };
+.status,
+.status-bar {
+  color: #fbbf24;
+  margin-top: 12px;
+  text-align: center;
+}
 
-      const response = await axios.post(`${API_URL}${endpoint}`, payload);
-      const nextToken = response.data.token;
-      const nextUsername = response.data.user?.username || username;
-
-      setToken(nextToken);
-      setTokenState(nextToken);
-      localStorage.setItem('chat-user-id', response.data.user?.id || '');
-      localStorage.setItem('chat-username', nextUsername);
-      setUsername(nextUsername);
-      setStatus(`${authMode === 'register' ? 'Registered' : 'Logged in'} successfully`);
-    } catch (error: any) {
-      setStatus(error?.response?.data?.error || 'Authentication failed');
-    }
-  };
-
-  const sendMessage = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!messageText.trim() || !socketRef.current) return;
-
-    socketRef.current.emit('message', { room, content: messageText });
-    setMessageText('');
-  };
-
-  const logout = () => {
-    clearToken();
-    localStorage.removeItem('chat-user-id');
-    localStorage.removeItem('chat-username');
-    socketRef.current?.disconnect();
-    setTokenState(null);
-    setUsername('');
-    setMessages([]);
-    setOnlineUsers([]);
-    setStatus('Logged out');
-  };
-
-  if (!token) {
-    return (
-      <div className="auth-shell">
-        <div className="auth-card">
-          <h1>Realtime Chat</h1>
-          <div className="toggle-row">
-            <button className={authMode === 'register' ? 'active' : ''} onClick={() => setAuthMode('register')}>
-              Register
-            </button>
-            <button className={authMode === 'login' ? 'active' : ''} onClick={() => setAuthMode('login')}>
-              Login
-            </button>
-          </div>
-
-          <form onSubmit={submitAuth} className="auth-form">
-            <input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-            {authMode === 'register' && (
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            )}
-            <button type="submit">{authMode === 'register' ? 'Create account' : 'Login'}</button>
-          </form>
-          {status && <p className="status">{status}</p>}
-        </div>
-      </div>
-    );
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
   }
 
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="panel-header">
-          <h2>Rooms</h2>
-          <button className="ghost" onClick={logout}>Logout</button>
-        </div>
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  }
 
-        <div className="room-list">
-          {['general', 'design', 'engineering', 'random'].map((name) => (
-            <button
-              key={name}
-              className={room === name ? 'room active' : 'room'}
-              onClick={() => setRoom(name)}
-            >
-              #{name}
-            </button>
-          ))}
-        </div>
-
-        <div className="panel-header small">
-          <h3>Online</h3>
-        </div>
-        <ul className="user-list">
-          {onlineUsers.length > 0 ? (
-            onlineUsers.map((userItem) => (
-              <li key={userItem._id}>{userItem.username}</li>
-            ))
-          ) : (
-            <li>No users online</li>
-          )}
-        </ul>
-      </aside>
-
-      <main className="chat-shell">
-        <header className="chat-header">
-          <div>
-            <h2>#{room}</h2>
-            <small>{isConnected ? 'Live' : 'Connecting...'}</small>
-          </div>
-        </header>
-
-        <div className="messages">
-          {messages.length === 0 ? (
-            <div className="empty-state">No messages yet. Start the conversation.</div>
-          ) : (
-            messages.map((msg, index) => (
-              <div key={`${msg._id || index}-${msg.createdAt || index}`} className="message-item">
-                <strong>{msg.sender}</strong>
-                <span>{msg.content}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-        <form onSubmit={sendMessage} className="composer">
-          <input
-            value={messageText}
-            placeholder="Type a message..."
-            onChange={(e) => setMessageText(e.target.value)}
-          />
-          <button type="submit" disabled={!messageText.trim()}>Send</button>
-        </form>
-
-        {status && <div className="status-bar">{status}</div>}
-      </main>
-    </div>
-  );
+  .message-item {
+    max-width: 100%;
+  }
 }
